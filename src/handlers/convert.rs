@@ -1,6 +1,7 @@
 use crate::error::ApiError;
 use crate::models::{ConvertQuery, ConvertResponse};
-use crate::services::{RedisStore, convert_currency};
+use crate::services::convert_currency;
+use crate::state::AppState;
 use axum::{
     Json,
     extract::{Query, State},
@@ -8,7 +9,7 @@ use axum::{
 use validator::Validate;
 
 pub async fn convert_handler(
-    State(store): State<RedisStore>,
+    State(state): State<AppState>,
     Query(params): Query<ConvertQuery>,
 ) -> Result<Json<ConvertResponse>, ApiError> {
     params
@@ -19,7 +20,7 @@ pub async fn convert_handler(
     let from = params.from.to_uppercase();
     let to = params.to.to_uppercase();
 
-    let rates = store.get_rates().await?.ok_or(ApiError::NoRatesAvailable)?;
+    let rates = state.store.get_rates().await?.ok_or(ApiError::NoRatesAvailable)?;
     let (result, rate) = convert_currency(&rates, &from, &to, amount)?;
 
     Ok(Json(ConvertResponse {

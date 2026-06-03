@@ -2,7 +2,8 @@
 /target/
 **/*.rs.bk
 *.pdb
-Cargo.lock
+# Cargo.lock IS committed: this is a binary app and the offline/vendored
+# Docker build requires a pinned lockfile.
 
 # IDE
 .vscode/

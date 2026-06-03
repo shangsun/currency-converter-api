@@ -1,4 +1,5 @@
-use crate::services::{EcbFetcher, RedisStore};
+use crate::services::{Fetcher, Store};
+use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 pub struct RateScheduler {
@@ -9,8 +10,8 @@ impl RateScheduler {
     /// Create a new scheduler for updating exchange rates
     pub async fn new(
         cron_expression: String,
-        fetcher: EcbFetcher,
-        store: RedisStore,
+        fetcher: Arc<dyn Fetcher>,
+        store: Arc<dyn Store>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let scheduler = JobScheduler::new().await?;
 
@@ -55,8 +56,8 @@ impl RateScheduler {
 
 /// Perform an immediate update of exchange rates (used for initial fetch and scheduled updates)
 pub async fn update_rates(
-    fetcher: &EcbFetcher,
-    store: &RedisStore,
+    fetcher: &Arc<dyn Fetcher>,
+    store: &Arc<dyn Store>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Fetching latest exchange rates from ECB");
 
@@ -73,14 +74,4 @@ pub async fn update_rates(
     tracing::info!("Exchange rates updated successfully");
 
     Ok(())
-}
-
-// Make EcbFetcher cloneable for async job
-impl Clone for EcbFetcher {
-    fn clone(&self) -> Self {
-        Self {
-            client: self.client.clone(),
-            ecb_url: self.ecb_url.clone(),
-        }
-    }
 }

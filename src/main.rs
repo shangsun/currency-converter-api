@@ -4,10 +4,16 @@ mod handlers;
 mod models;
 mod routes;
 mod services;
+mod state;
 
 use config::Config;
 use routes::create_router;
-use services::{EcbFetcher, RateScheduler, RedisStore, update_rates};
+use services::{
+    Clock, EcbFetcher, Fetcher, InMemoryStore, RateScheduler, RedisStore, Store, SystemClock,
+    update_rates,
+};
+use state::AppState;
+use std::sync::Arc;
 use tokio::signal;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -29,16 +35,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env()?;
     tracing::info!("Loaded configuration");
 
-    // Connect to Redis
-    let store = RedisStore::new(&config.redis_url).await?;
-    tracing::info!("Connected to Redis");
+    // Select the storage backend. In-memory by default (no external service);
+    // Redis is optional and opt-in via STORE_BACKEND=redis.
+    let store: Arc<dyn Store> = match std::env::var("STORE_BACKEND").as_deref() {
+        Ok("redis") => {
+            let s = RedisStore::new(&config.redis_url).await?;
+            tracing::info!("Using Redis store");
+            Arc::new(s)
+        }
+        _ => {
+            tracing::info!("Using in-memory store");
+            Arc::new(InMemoryStore::new())
+        }
+    };
 
-    // Create ECB fetcher
-    let fetcher = EcbFetcher::new(config.ecb_url.clone());
+    // Create ECB fetcher and the system clock.
+    let fetcher: Arc<dyn Fetcher> = Arc::new(EcbFetcher::new(config.ecb_url.clone()));
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+
+    let state = AppState {
+        store,
+        fetcher,
+        clock,
+    };
 
     // Perform initial fetch (non-blocking - log error but continue)
     tracing::info!("Attempting initial fetch of exchange rates...");
-    match update_rates(&fetcher, &store).await {
+    match update_rates(&state.fetcher, &state.store).await {
         Ok(_) => {
             tracing::info!("Initial exchange rates loaded successfully");
         }
@@ -48,16 +71,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Create and start the scheduler
-    let mut scheduler =
-        RateScheduler::new(config.update_cron.clone(), fetcher, store.clone()).await?;
+    let mut scheduler = RateScheduler::new(
+        config.update_cron.clone(),
+        state.fetcher.clone(),
+        state.store.clone(),
+    )
+    .await?;
     scheduler.start().await?;
     tracing::info!(
         "Rate update scheduler started with cron: {}",
         config.update_cron
     );
+    tracing::info!("Server clock initialized at {}", state.clock.now());
 
     // Create router with shared state
-    let app = create_router(store);
+    let app = create_router(state);
 
     // Start server
     let listener = tokio::net::TcpListener::bind(&config.server_address()).await?;

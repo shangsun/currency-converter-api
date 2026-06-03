@@ -1,5 +1,5 @@
 use crate::handlers::{convert_handler, health_handler, latest_rates_handler};
-use crate::services::RedisStore;
+use crate::state::AppState;
 use axum::{Json, Router, http::StatusCode, routing::get};
 use serde_json::json;
 use tower_http::{
@@ -24,7 +24,7 @@ async fn root_handler() -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
-pub fn create_router(store: RedisStore) -> Router {
+pub fn create_router(state: AppState) -> Router {
     // CORS configuration - adjust origins for production
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -40,7 +40,7 @@ pub fn create_router(store: RedisStore) -> Router {
         .route("/api/latest", get(latest_rates_handler))
         .route("/api/convert", get(convert_handler))
         // Add shared state
-        .with_state(store)
+        .with_state(state)
         // Add middleware layers
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())

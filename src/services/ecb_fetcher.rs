@@ -1,5 +1,7 @@
 use crate::error::ApiError;
 use crate::models::{DailyRate, EcbEnvelope};
+use crate::services::Fetcher;
+use async_trait::async_trait;
 use std::time::Duration;
 
 const USER_AGENT: &str = "Currency-API/0.1.0";
@@ -21,8 +23,33 @@ impl EcbFetcher {
         Self { client, ecb_url }
     }
 
+    /// Parse ECB XML format into DailyRate
+    fn parse_ecb_xml(&self, xml: &str) -> Result<DailyRate, ApiError> {
+        // Parse with quick-xml
+        let envelope: EcbEnvelope = quick_xml::de::from_str(xml)
+            .map_err(|e| ApiError::XmlParseError(format!("Failed to parse XML: {}", e)))?;
+
+        let time_cube = envelope.cube.time_cube;
+        let daily_rate = DailyRate::from_ecb_data(time_cube.time, time_cube.rates)
+            .map_err(ApiError::XmlParseError)?;
+
+        // Validate date format
+        daily_rate.validate_date().map_err(ApiError::XmlParseError)?;
+
+        tracing::info!(
+            "Successfully parsed {} exchange rates for {}",
+            daily_rate.rates.len(),
+            daily_rate.date
+        );
+
+        Ok(daily_rate)
+    }
+}
+
+#[async_trait]
+impl Fetcher for EcbFetcher {
     /// Fetch and parse ECB XML data into DailyRate
-    pub async fn fetch_rates(&self) -> Result<DailyRate, ApiError> {
+    async fn fetch_rates(&self) -> Result<DailyRate, ApiError> {
         tracing::info!("Fetching exchange rates from ECB: {}", self.ecb_url);
 
         // Fetch XML
@@ -47,30 +74,6 @@ impl EcbFetcher {
 
         // Parse XML
         self.parse_ecb_xml(&xml_content)
-    }
-
-    /// Parse ECB XML format into DailyRate
-    fn parse_ecb_xml(&self, xml: &str) -> Result<DailyRate, ApiError> {
-        // Parse with quick-xml
-        let envelope: EcbEnvelope = quick_xml::de::from_str(xml)
-            .map_err(|e| ApiError::XmlParseError(format!("Failed to parse XML: {}", e)))?;
-
-        let time_cube = envelope.cube.time_cube;
-        let daily_rate = DailyRate::from_ecb_data(time_cube.time, time_cube.rates)
-            .map_err(|e| ApiError::XmlParseError(e))?;
-
-        // Validate date format
-        daily_rate
-            .validate_date()
-            .map_err(|e| ApiError::XmlParseError(e))?;
-
-        tracing::info!(
-            "Successfully parsed {} exchange rates for {}",
-            daily_rate.rates.len(),
-            daily_rate.date
-        );
-
-        Ok(daily_rate)
     }
 }
 

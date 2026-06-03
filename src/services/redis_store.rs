@@ -1,11 +1,14 @@
 use crate::error::ApiError;
 use crate::models::DailyRate;
+use crate::services::Store;
+use async_trait::async_trait;
 use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, Client};
 
 const RATES_KEY: &str = "exchange:rates:latest";
 const DATE_KEY: &str = "exchange:rates:date";
 
+/// Redis-backed [`Store`]. Optional backend, selected via `STORE_BACKEND=redis`.
 #[derive(Clone)]
 pub struct RedisStore {
     manager: ConnectionManager,
@@ -16,19 +19,22 @@ impl RedisStore {
     pub async fn new(redis_url: &str) -> Result<Self, ApiError> {
         tracing::info!("Connecting to Redis at: {}", redis_url);
 
-        let client = Client::open(redis_url).map_err(|e| ApiError::RedisError(e))?;
+        let client = Client::open(redis_url).map_err(ApiError::RedisError)?;
 
         let manager = ConnectionManager::new(client)
             .await
-            .map_err(|e| ApiError::RedisError(e))?;
+            .map_err(ApiError::RedisError)?;
 
         tracing::info!("Successfully connected to Redis");
 
         Ok(Self { manager })
     }
+}
 
+#[async_trait]
+impl Store for RedisStore {
     /// Store exchange rates in Redis
-    pub async fn store_rates(&self, rates: &DailyRate) -> Result<(), ApiError> {
+    async fn store_rates(&self, rates: &DailyRate) -> Result<(), ApiError> {
         let mut conn = self.manager.clone();
 
         // Serialize rates to JSON
@@ -45,7 +51,7 @@ impl RedisStore {
     }
 
     /// Retrieve exchange rates from Redis
-    pub async fn get_rates(&self) -> Result<Option<DailyRate>, ApiError> {
+    async fn get_rates(&self) -> Result<Option<DailyRate>, ApiError> {
         let mut conn = self.manager.clone();
 
         let json: Option<String> = conn.get(RATES_KEY).await?;
@@ -67,19 +73,19 @@ impl RedisStore {
     }
 
     /// Get the date of last update
-    pub async fn get_last_update_date(&self) -> Result<Option<String>, ApiError> {
+    async fn get_last_update_date(&self) -> Result<Option<String>, ApiError> {
         let mut conn = self.manager.clone();
         let date: Option<String> = conn.get(DATE_KEY).await?;
         Ok(date)
     }
 
     /// Health check for Redis connection
-    pub async fn health_check(&self) -> Result<(), ApiError> {
+    async fn health_check(&self) -> Result<(), ApiError> {
         let mut conn = self.manager.clone();
         redis::cmd("PING")
             .query_async::<()>(&mut conn)
             .await
-            .map_err(|e| ApiError::RedisError(e))?;
+            .map_err(ApiError::RedisError)?;
         Ok(())
     }
 }

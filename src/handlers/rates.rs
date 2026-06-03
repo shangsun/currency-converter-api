@@ -1,11 +1,12 @@
 use crate::error::ApiError;
 use crate::models::{LatestRatesQuery, LatestRatesResponse};
-use crate::services::{rebase_rates, RedisStore};
+use crate::services::rebase_rates;
+use crate::state::AppState;
 use axum::{extract::{Query, State}, Json};
 use validator::Validate;
 
 pub async fn latest_rates_handler(
-    State(store): State<RedisStore>,
+    State(state): State<AppState>,
     Query(params): Query<LatestRatesQuery>,
 ) -> Result<Json<LatestRatesResponse>, ApiError> {
     // Validate query parameters
@@ -13,8 +14,9 @@ pub async fn latest_rates_handler(
         .validate()
         .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 
-    // Get rates from Redis
-    let rates = store
+    // Get rates from the store
+    let rates = state
+        .store
         .get_rates()
         .await?
         .ok_or(ApiError::NoRatesAvailable)?;

@@ -1,7 +1,7 @@
 # Multi-stage build for optimized image size
 
 # Build stage
-FROM rust:1.83-slim as builder
+FROM rust:1.85-slim AS builder
 
 WORKDIR /app
 
