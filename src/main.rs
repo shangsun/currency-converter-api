@@ -1,18 +1,10 @@
-mod config;
-mod error;
-mod handlers;
-mod models;
-mod routes;
-mod services;
-mod state;
-
-use config::Config;
-use routes::create_router;
-use services::{
+use currency_converter_api::config::Config;
+use currency_converter_api::routes::create_router;
+use currency_converter_api::services::{
     Clock, EcbFetcher, Fetcher, InMemoryStore, RateScheduler, RedisStore, Store, SystemClock,
     update_rates,
 };
-use state::AppState;
+use currency_converter_api::state::AppState;
 use std::sync::Arc;
 use tokio::signal;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
