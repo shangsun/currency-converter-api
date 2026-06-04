@@ -45,11 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fetcher: Arc<dyn Fetcher> = Arc::new(EcbFetcher::new(config.ecb_url.clone()));
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
-    let state = AppState {
-        store,
-        fetcher,
-        clock,
-    };
+    let state = AppState::new(store, fetcher, clock);
 
     // Perform initial fetch (non-blocking - log error but continue)
     tracing::info!("Attempting initial fetch of exchange rates...");

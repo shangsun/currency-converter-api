@@ -20,7 +20,7 @@ pub async fn convert_handler(
     let from = params.from.to_uppercase();
     let to = params.to.to_uppercase();
 
-    let rates = state.store.get_rates().await?.ok_or(ApiError::NoRatesAvailable)?;
+    let rates = state.current_rates().await?;
     let (result, rate) = convert_currency(&rates, &from, &to, amount)?;
 
     Ok(Json(ConvertResponse {

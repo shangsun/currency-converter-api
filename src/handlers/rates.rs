@@ -14,12 +14,8 @@ pub async fn latest_rates_handler(
         .validate()
         .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 
-    // Get rates from the store
-    let rates = state
-        .store
-        .get_rates()
-        .await?
-        .ok_or(ApiError::NoRatesAvailable)?;
+    // Get rates via the read path
+    let rates = state.current_rates().await?;
 
     // If base currency is specified, rebase the rates
     let result = if let Some(base) = params.base {
